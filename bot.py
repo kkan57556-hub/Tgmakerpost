@@ -43,11 +43,8 @@ from telegram.ext import (
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-BOT_TOKEN = "8552889682:AAEsQ47kyzIV_VEBd90DHwC2satwQXBcMDA"
-
-if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
-    BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
-
+# ⚠️ ဒီနေရာမှာ Token မထည့်ပါနဲ့။ Render ရဲ့ Environment Variable ကနေ ဖတ်ပါမယ်။
+BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 DB_FILE = os.getenv("DB_FILE", "bot_data.db")
 PORT = int(os.getenv("PORT", "8080"))
 
@@ -63,14 +60,13 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 # ---------------------------------------------------------------------------
-# HTTP health-check server (needed for Render Web Service)
+# HTTP health-check server (Render အတွက် မဖြစ်မနေ လိုအပ်ပါတယ်)
 # ---------------------------------------------------------------------------
 async def _health_handler(request: web.Request) -> web.Response:
     return web.Response(text="🤖 Post Maker Bot is running!", status=200)
 
 
 async def _start_health_server() -> None:
-    """Start a tiny aiohttp server on $PORT so Render keeps the service alive."""
     app = web.Application()
     app.router.add_get("/", _health_handler)
     app.router.add_get("/health", _health_handler)
@@ -84,8 +80,10 @@ async def _start_health_server() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Button Builder — supports style= gracefully
+# Button Builder — Emoji အရောင်လေးတွေ ထည့်ပေးမယ့် စနစ်
 # ---------------------------------------------------------------------------
+COLOR_EMOJI = {"primary": "🔵", "success": "🟢", "danger": "🔴"}
+
 def btn(
     text: str,
     callback_data: Optional[str] = None,
@@ -98,15 +96,13 @@ def btn(
     if url is not None:
         kwargs["url"] = url
 
-    if style:
-        try:
-            return InlineKeyboardButton(**kwargs, style=style)
-        except TypeError:
-            pass
+    # Telegram မှာ Background Color မရတဲ့အတွက် စာသားရှေ့မှာ Emoji လေးတွေ ထည့်ပေးတာပါ
+    if style and style in COLOR_EMOJI:
+        emoji = COLOR_EMOJI[style]
+        if not text.startswith(emoji):
+            kwargs["text"] = f"{emoji} {text}"
+
     return InlineKeyboardButton(**kwargs)
-
-
-COLOR_EMOJI = {"primary": "🔵", "success": "🟢", "danger": "🔴"}
 
 
 # ---------------------------------------------------------------------------
@@ -288,24 +284,24 @@ def is_valid_url(url: str) -> bool:
 # ---------------------------------------------------------------------------
 def kb_main_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [btn("⚙️ Set Target", callback_data="menu_set_channel", style="primary"),
-         btn("📝 Create Post", callback_data="menu_create_post", style="success")],
-        [btn("📋 My Targets", callback_data="menu_my_channels", style="primary"),
-         btn("📚 History", callback_data="menu_my_posts", style="primary")],
-        [btn("❓ Help & Guide", callback_data="menu_help", style="primary")],
+        [btn("Set Target", callback_data="menu_set_channel", style="primary"),
+         btn("Create Post", callback_data="menu_create_post", style="success")],
+        [btn("My Targets", callback_data="menu_my_channels", style="primary"),
+         btn("History", callback_data="menu_my_posts", style="primary")],
+        [btn("Help & Guide", callback_data="menu_help", style="primary")],
     ])
 
 
 def kb_cancel() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [btn("❌ Cancel", callback_data="cancel_action", style="danger")]
+        [btn("Cancel", callback_data="cancel_action", style="danger")]
     ])
 
 
 def kb_skip_cancel(skip_cb: str, skip_label: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [btn(skip_label, callback_data=skip_cb, style="primary")],
-        [btn("❌ Cancel", callback_data="cancel_action", style="danger")],
+        [btn("Cancel", callback_data="cancel_action", style="danger")],
     ])
 
 
@@ -331,7 +327,7 @@ async def check_bot_posting_permission(bot, target_id: int) -> tuple[bool, str]:
         if isinstance(member, ChatMemberAdministrator):
             can_post = getattr(member, "can_post_messages", None)
             if can_post is False:
-                return False, "Bot is an Admin but lacks 'Post Messages' permission."
+                return False, "Bot is Admin but lacks 'Post Messages' permission."
             return True, "Administrator"
         return False, "Bot is not an Administrator in this Channel/Group."
     except BadRequest as e:
@@ -418,7 +414,7 @@ async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await query.edit_message_text(
         help_text,
         reply_markup=InlineKeyboardMarkup([
-            [btn("🔙 Back to Menu", callback_data="main_menu", style="primary")]
+            [btn("Back to Menu", callback_data="main_menu", style="primary")]
         ]),
         parse_mode=ParseMode.HTML,
     )
@@ -435,8 +431,8 @@ async def _render_my_channels(query, user_id: int) -> None:
             "👉 Start with <b>Set Target</b>."
         )
         keyboard = InlineKeyboardMarkup([
-            [btn("⚙️ Set Target", callback_data="menu_set_channel", style="primary")],
-            [btn("🔙 Back to Menu", callback_data="main_menu", style="primary")],
+            [btn("Set Target", callback_data="menu_set_channel", style="primary")],
+            [btn("Back to Menu", callback_data="main_menu", style="primary")],
         ])
     else:
         msg = "📋 <b>My Verified Targets</b>\n━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -447,9 +443,9 @@ async def _render_my_channels(query, user_id: int) -> None:
             msg += f"{icon} <b>{idx}. {title}</b>\n<code>ID: {ch['channel_id']}</code>\n\n"
 
         keyboard = InlineKeyboardMarkup([
-            [btn("⚙️ Add New", callback_data="menu_set_channel", style="primary"),
-             btn("🗑 Remove", callback_data="remove_target_menu", style="danger")],
-            [btn("🔙 Back to Menu", callback_data="main_menu", style="primary")],
+            [btn("Add New", callback_data="menu_set_channel", style="primary"),
+             btn("Remove", callback_data="remove_target_menu", style="danger")],
+            [btn("Back to Menu", callback_data="main_menu", style="primary")],
         ])
 
     await query.edit_message_text(msg, reply_markup=keyboard, parse_mode=ParseMode.HTML)
@@ -474,11 +470,11 @@ async def remove_target_menu_callback(update: Update, context: ContextTypes.DEFA
     for ch in channels:
         icon = "📢" if ch.get("chat_type") == "Channel" else "👥"
         keyboard.append([
-            btn(f"🗑 {icon} {ch['channel_title']}",
+            btn(f"{icon} {ch['channel_title']}",
                 callback_data=f"del_chan_{ch['channel_id']}",
                 style="danger")
         ])
-    keyboard.append([btn("🔙 Back", callback_data="menu_my_channels", style="primary")])
+    keyboard.append([btn("Back", callback_data="menu_my_channels", style="primary")])
 
     await query.edit_message_text(
         "🗑 <b>Remove Target</b>\n"
@@ -506,8 +502,8 @@ async def delete_channel_prompt_callback(update: Update, context: ContextTypes.D
 
     icon = "📢" if channel["chat_type"] == "Channel" else "👥"
     keyboard = InlineKeyboardMarkup([
-        [btn("✅ Yes, Remove", callback_data=f"confirm_del_{channel_id}", style="danger")],
-        [btn("🔙 Cancel", callback_data="menu_my_channels", style="primary")],
+        [btn("Yes, Remove", callback_data=f"confirm_del_{channel_id}", style="danger")],
+        [btn("Cancel", callback_data="menu_my_channels", style="primary")],
     ])
 
     await query.edit_message_text(
@@ -561,7 +557,7 @@ async def my_posts_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await query.edit_message_text(
         msg,
         reply_markup=InlineKeyboardMarkup([
-            [btn("🔙 Back to Menu", callback_data="main_menu", style="primary")]
+            [btn("Back to Menu", callback_data="main_menu", style="primary")]
         ]),
         parse_mode=ParseMode.HTML,
     )
@@ -681,8 +677,8 @@ async def create_post_start(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             "⚠️ <b>No target added</b>\n\n"
             "Please add a Channel or Group before creating a post.",
             reply_markup=InlineKeyboardMarkup([
-                [btn("⚙️ Set Target", callback_data="menu_set_channel", style="primary")],
-                [btn("🔙 Main Menu", callback_data="main_menu", style="primary")],
+                [btn("Set Target", callback_data="menu_set_channel", style="primary")],
+                [btn("Main Menu", callback_data="main_menu", style="primary")],
             ]),
             parse_mode=ParseMode.HTML,
         )
@@ -696,7 +692,7 @@ async def create_post_start(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 callback_data=f"sel_chan_{ch['channel_id']}",
                 style="primary")
         ])
-    keyboard.append([btn("❌ Cancel", callback_data="cancel_action", style="danger")])
+    keyboard.append([btn("Cancel", callback_data="cancel_action", style="danger")])
 
     await query.edit_message_text(
         "📝 <b>Create Post — 1/6</b>\n"
@@ -741,10 +737,10 @@ async def select_channel_callback(update: Update, context: ContextTypes.DEFAULT_
     }
 
     keyboard = InlineKeyboardMarkup([
-        [btn("📄 Text", callback_data="post_type_text", style="primary"),
-         btn("🖼 Photo", callback_data="post_type_photo", style="primary"),
-         btn("🎥 Video", callback_data="post_type_video", style="primary")],
-        [btn("❌ Cancel", callback_data="cancel_action", style="danger")],
+        [btn("Text", callback_data="post_type_text", style="primary"),
+         btn("Photo", callback_data="post_type_photo", style="primary"),
+         btn("Video", callback_data="post_type_video", style="primary")],
+        [btn("Cancel", callback_data="cancel_action", style="danger")],
     ])
 
     await query.edit_message_text(
@@ -839,7 +835,7 @@ async def ask_caption_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "Do you want to add a caption?\n"
         "Send text or tap <b>Skip</b>.",
-        reply_markup=kb_skip_cancel("skip_caption", "⏭ Skip Caption"),
+        reply_markup=kb_skip_cancel("skip_caption", "Skip Caption"),
         parse_mode=ParseMode.HTML,
     )
     return STATE_ENTER_CAPTION
@@ -881,7 +877,7 @@ async def ask_button_step(source: Any, context: ContextTypes.DEFAULT_TYPE, is_qu
         "• 2 in one row: <code>Site - https://a.com | Join - https://t.me/x</code>\n\n"
         "If you don't want buttons, tap <b>Skip</b>."
     )
-    keyboard = kb_skip_cancel("skip_buttons", "⏭ Skip Buttons")
+    keyboard = kb_skip_cancel("skip_buttons", "Skip Buttons")
 
     if is_query:
         await source.edit_message_text(msg, reply_markup=keyboard, parse_mode=ParseMode.HTML)
@@ -935,10 +931,10 @@ async def add_buttons_process(update: Update, context: ContextTypes.DEFAULT_TYPE
     draft["buttons"] = rows
 
     keyboard = InlineKeyboardMarkup([
-        [btn("🔵 Primary", callback_data="btncolor_primary", style="primary"),
-         btn("🟢 Success", callback_data="btncolor_success", style="success"),
-         btn("🔴 Danger", callback_data="btncolor_danger", style="danger")],
-        [btn("❌ Cancel", callback_data="cancel_action", style="danger")],
+        [btn("Primary", callback_data="btncolor_primary", style="primary"),
+         btn("Success", callback_data="btncolor_success", style="success"),
+         btn("Danger", callback_data="btncolor_danger", style="danger")],
+        [btn("Cancel", callback_data="cancel_action", style="danger")],
     ])
 
     await send_tracked(
@@ -1041,12 +1037,12 @@ async def show_preview(source: Any, context: ContextTypes.DEFAULT_TYPE, is_query
         track_msg(context, sent.message_id)
 
     confirm_keyboard = InlineKeyboardMarkup([
-        [btn("🚀 Publish Now", callback_data="publish_confirm", style="success")],
-        [btn("❌ Cancel", callback_data="cancel_action", style="danger")],
+        [btn("Publish Now", callback_data="publish_confirm", style="success")],
+        [btn("Cancel", callback_data="cancel_action", style="danger")],
     ])
 
     sent_confirm = await target_msg.reply_text(
-        "Does everything look good?\nTap <b>🚀 Publish Now</b> to publish.",
+        "Does everything look good?\nTap <b>Publish Now</b> to publish.",
         reply_markup=confirm_keyboard,
         parse_mode=ParseMode.HTML,
     )
@@ -1195,7 +1191,7 @@ def main() -> None:
 
     async def _post_init(app: Application) -> None:
         await init_db()
-        await _start_health_server()
+        await _start_health_server()  # Render အတွက် Web Server စတင်ခြင်း
 
     app: Application = ApplicationBuilder().token(token).post_init(_post_init).build()
 
